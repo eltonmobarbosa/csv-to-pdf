@@ -1,0 +1,6 @@
+Pedido;Cliente;Cidade;Produto;Valor;Observação
+1001;Ana Souza;São Paulo;Notebook;"4.599,90";Entrega rápida
+1002;João Araújo;Belém;Mouse sem fio;"89,90";"Cliente pediu ""embalagem de presente"""
+1003;Conceição Lima;Maceió;Monitor 27";"1.299,00";"Linha 1
+Linha 2"
+1004;Empresa XPTO;Curitiba;Teclado;"249,50";CodigoMuitoLongoSemEspacosParaTestarAQuebraDeLinhaDentroDaCelulaDaTabelaDoPdfGerado
