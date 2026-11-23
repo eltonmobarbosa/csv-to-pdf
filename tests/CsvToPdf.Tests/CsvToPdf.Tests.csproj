@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\CsvToPdf\CsvToPdf.csproj" />
+    <ProjectReference Include="..\..\src\CsvToPdf.Core\CsvToPdf.Core.csproj" />
   </ItemGroup>
 
 </Project>

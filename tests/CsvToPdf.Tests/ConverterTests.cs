@@ -71,21 +71,106 @@ public class ConverterTests : IDisposable
     }
 
     [Fact]
-    public void RejectsRowTallerThanPage()
+    public void RowTallerThanPageContinuesOnNextPages()
     {
         var text = string.Join(' ', Enumerable.Repeat("palavra", 12000));
         var rows = new List<string[]> { new[] { "id", "texto" }, new[] { "1", text } };
-        var error = Assert.Throws<InvalidDataException>(() =>
-            PdfExporter.Export(rows, Path.Combine(_dir, "out.pdf"), "t"));
-        Assert.Contains("registro 2", error.Message);
+
+        var result = PdfExporter.Export(rows, Path.Combine(_dir, "out.pdf"), "t");
+
+        Assert.True(result.Pages > 1);
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(60)]
+    [InlineData(300)]
+    public void WideTableKeepsEveryColumn(int columns)
+    {
+        var header = Enumerable.Range(1, columns).Select(c => $"Coluna {c}").ToArray();
+        var rows = new List<string[]> { header, header.Select(h => h + " valor bem comprido").ToArray() };
+        var output = Path.Combine(_dir, "out.pdf");
+
+        var result = PdfExporter.Export(rows, output, "t");
+
+        Assert.Equal(Enumerable.Range(0, columns), result.ColumnGroups.SelectMany(g => g).Distinct().Order());
+        Assert.All(result.ColumnGroups, g => Assert.Equal(0, g[0]));
+        Assert.Equal(columns + result.ColumnGroups.Count - 1, result.ColumnGroups.Sum(g => g.Length));
+        using var pdf = PdfReader.Open(output, PdfDocumentOpenMode.Import);
+        Assert.Equal(result.Pages, pdf.PageCount);
+    }
+
+    [Theory]
+    [InlineData("CodigoMuitoLongoSemEspacosQueNaoPodeGanharHifenNemPerderCaracteres")]
+    [InlineData("texto com várias palavras e-um-hífen para quebrar em linhas")]
+    public void WrapKeepsTextAndWidth(string text)
+    {
+        var measurer = new TextMeasurer("Arial");
+
+        var lines = measurer.Wrap(text, false, 8, 40);
+
+        Assert.True(lines.Length > 1);
+        Assert.Equal(text.Replace(" ", ""), string.Concat(lines).Replace(" ", ""));
+        Assert.All(lines, l => Assert.True(measurer.LongestLine(l, false) * 8 <= 40.01));
     }
 
     [Fact]
-    public void RejectsEmptyAndTooWideCsv()
+    public void CancelKeepsExistingPdf()
     {
         var output = Path.Combine(_dir, "out.pdf");
-        Assert.Throws<InvalidDataException>(() => PdfExporter.Export([], output, "t"));
-        var wide = new[] { Enumerable.Repeat("x", PdfExporter.MaxColumns + 1).ToArray() };
-        Assert.Throws<InvalidDataException>(() => PdfExporter.Export(wide, output, "t"));
+        File.WriteAllText(output, "original");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            PdfExporter.Export([["a"], ["1"]], output, "t", cancellation: cancelled.Token));
+
+        Assert.Equal("original", File.ReadAllText(output));
+        Assert.Single(Directory.GetFiles(_dir, "out.pdf*"));
     }
+
+    [Fact]
+    public void ReadsCsvLockedForWritingLikeExcel()
+    {
+        var path = WriteCsv("a,b\n1,2");
+        using var excel = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+
+        Assert.Equal(["1", "2"], CsvLoader.Load(path)[1]);
+    }
+
+    [Theory]
+    [InlineData("dados.txt")]
+    [InlineData("dados.tsv")]
+    [InlineData("dados.pdf")]
+    [InlineData("dados.csv.exe")]
+    [InlineData("dados")]
+    public void RejectsNonCsvExtension(string name)
+    {
+        var path = Path.Combine(_dir, name);
+        File.WriteAllText(path, "a,b\n1,2");
+
+        Assert.Throws<InvalidDataException>(() => CsvLoader.Load(path));
+    }
+
+    [Fact]
+    public void RejectsBinaryRenamedToCsv()
+    {
+        var path = Path.Combine(_dir, "foto.csv");
+        File.WriteAllBytes(path, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]);
+
+        Assert.Throws<InvalidDataException>(() => CsvLoader.Load(path));
+    }
+
+    [Fact]
+    public void AcceptsUppercaseExtensionAndUtf16()
+    {
+        var path = Path.Combine(_dir, "DADOS.CSV");
+        File.WriteAllText(path, "a,b\n1,2", Encoding.Unicode);
+
+        Assert.Equal(["1", "2"], CsvLoader.Load(path)[1]);
+    }
+
+    [Fact]
+    public void RejectsEmptyCsv() =>
+        Assert.Throws<InvalidDataException>(() => PdfExporter.Export([], Path.Combine(_dir, "out.pdf"), "t"));
 }

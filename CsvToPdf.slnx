@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/CsvToPdf.Core/CsvToPdf.Core.csproj" />
+    <Project Path="src/CsvToPdf.Gui/CsvToPdf.Gui.csproj" />
     <Project Path="src/CsvToPdf/CsvToPdf.csproj" />
   </Folder>
   <Folder Name="/tests/">

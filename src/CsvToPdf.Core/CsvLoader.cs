@@ -9,10 +9,20 @@ public static class CsvLoader
 
     static CsvLoader() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+    public static bool IsCsvPath(string path) =>
+        Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Reads a CSV file into rows that all have the same number of columns.</summary>
     public static List<string[]> Load(string path)
     {
+        if (!IsCsvPath(path))
+            throw new InvalidDataException("Apenas arquivos .csv são aceitos.");
+
         var text = ReadText(path);
+        // Decoded text never has NUL, so this catches binaries renamed to .csv.
+        if (text.Contains('\0'))
+            throw new InvalidDataException("O arquivo não é um CSV válido.");
+
         using var parser = new TextFieldParser(new StringReader(text))
         {
             TextFieldType = FieldType.Delimited,
@@ -31,7 +41,11 @@ public static class CsvLoader
     // Excel in pt-BR saves Windows-1252 unless "CSV UTF-8" is chosen.
     private static string ReadText(string path)
     {
-        var bytes = File.ReadAllBytes(path);
+        // FileShare.ReadWrite allows reading a CSV that is still open in Excel.
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var buffer = new MemoryStream();
+        file.CopyTo(buffer);
+        var bytes = buffer.ToArray();
         try
         {
             using var reader = new StreamReader(new MemoryStream(bytes), new UTF8Encoding(false, true), true);
